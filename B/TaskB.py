@@ -128,9 +128,10 @@ def knn_model(twitter_df,language,k):  # train, valid and test KNN model, and re
     x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=42, test_size=0.2)
     x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:(y_validation.size*4)//5],y_validation['Type'].astype('int')[:(y_validation.size*4)//5], random_state=None, test_size=0.25)
     # fit and predict
+    acc_train=knn_design(x_train_valid, x_train_valid, y_train_valid, y_train_valid,k)
     acc_valid=knn_design(x_train_valid, x_test_valid, y_train_valid, y_test_valid,k)
     acc_test=knn_design(x_train, x_test,y_train,y_test,5)
-    return acc_valid,acc_test
+    return acc_train,acc_valid,acc_test
 
 
 def KNN_compare(all_event,twitter_df,language,i_max,event_number):#for binary-split task
@@ -139,7 +140,7 @@ def KNN_compare(all_event,twitter_df,language,i_max,event_number):#for binary-sp
         #knn = KNeighborsClassifier(n_neighbors=i)#classify data
         #knn.fit(tr_X,tr_Y)#train model
         #pred_i = knn.predict(te_X)#make prediction using test datasets
-        v_avg,t_avg=train_all_event(all_event, twitter_df, language,i,event_number)
+        tr_avg,v_avg,t_avg=train_all_event(all_event, twitter_df, language,i,event_number)
         score_list.append(v_avg)
     plt.plot(range(1,i_max),score_list,color='pink', linestyle='dashed', marker='o', markerfacecolor='grey',markersize=10)
     plt.title("Accuracy vs. K Value (Binary)")
@@ -149,14 +150,17 @@ def KNN_compare(all_event,twitter_df,language,i_max,event_number):#for binary-sp
 
 
 def train_all_event(all_event,twitter_df,language,k,event_number):
+    tr_avg_k=0
     v_avg_k=0
     t_avg_k=0
     # train and test all kinds of events
     for event in all_event:
         df=one_event(event,twitter_df)
-        acc_v_k,acc_t_k=knn_model(df,language,k)
+        acc_tr_k,acc_v_k,acc_t_k=knn_model(df,language,k)
+        tr_avg_k+=acc_tr_k
         v_avg_k+=acc_v_k
         t_avg_k+=acc_t_k
+    tr_avg_k = tr_avg_k / event_number
     v_avg_k=v_avg_k/event_number
     t_avg_k=t_avg_k/event_number
-    return v_avg_k,t_avg_k
+    return tr_avg_k,v_avg_k,t_avg_k

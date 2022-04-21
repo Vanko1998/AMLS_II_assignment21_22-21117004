@@ -21,6 +21,7 @@ from nltk.tag import pos_tag
 from keras.models import Sequential
 from keras import layers
 from sklearn.model_selection import learning_curve
+from sklearn.metrics import classification_report
 
 
 def to_csv(address):  # change txt document to csv file
@@ -120,6 +121,12 @@ def naive_bayes(y_validation,tfidf):  # use naive bayes model, split train, vali
     x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:4800,:],y_validation['Type'][:4800].values.astype('int'), random_state=0, test_size=0.25)
     x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=0, test_size=0.2)
     # fit english version data
+    nb_train = MultinomialNB()
+    nb_train.fit(x_train_valid, y_train_valid)
+    naive_A_train = accuracy_score(y_train_valid, nb_train.predict(x_train_valid))
+    print('naive bayes training accuracy:')
+    print(naive_A_train)
+    # fit english version data
     nb_valid=MultinomialNB()
     nb_valid.fit(x_train_valid,y_train_valid)
     naive_A_valid=accuracy_score(y_test_valid,nb_valid.predict(x_test_valid))
@@ -138,6 +145,12 @@ def naive_bayes(y_validation,tfidf):  # use naive bayes model, split train, vali
 def random_forest(y_validation,tfidf):  # use random forest model, split train, validation and test dataset, fit model, and print accuracy
     x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:4800,:], y_validation['Type'][:4800].values.astype('int'), random_state=0, test_size=0.25)
     x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=0, test_size=0.2)
+    # fit english version data
+    rf_train = RandomForestClassifier(n_estimators=500, max_depth=20)
+    rf_train.fit(x_train_valid, y_train_valid)
+    random_A_train = accuracy_score(y_test_valid, rf_train.predict(x_test_valid))
+    print('random forest training accuracy:')
+    print(random_A_train)
     # fit english version data
     rf_valid=RandomForestClassifier(n_estimators=500,max_depth=20)
     rf_valid.fit(x_train_valid,y_train_valid)
@@ -212,7 +225,9 @@ def LSTM_model(twitter_df,y_validation,language,epochs):
     model.add(layers.Bidirectional(layers.LSTM(128)))
     model.add(layers.Dense(3,activation='softmax'))
     model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
+    #model.fit(X_train, y_train, batch_size=256, epochs=epochs, validation_data=(X_train, y_train))
     model.fit(X_train,y_train,batch_size=256,epochs=epochs,validation_data=(X_test,y_test))
+    #print(classification_report(y_test, np.rint(model.predict(X_test, batch_size=256)), digits=4))
 
 
 def draw_learning_curves(X, y, estimator, num_trainings,title):
