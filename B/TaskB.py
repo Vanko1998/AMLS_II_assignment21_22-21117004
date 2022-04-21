@@ -9,8 +9,8 @@ import seaborn as sns
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn import svm
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.preprocessing import StandardScaler
 
 
 def to_csv(address):  # change txt document to csv file
@@ -45,7 +45,7 @@ def preprocess(twitter_df,language):  # remove all unnecessary content in commen
     return twitter_df
 
 
-def plot_wordcloud(twitter_df,event):  # plot a word cloud for all words
+'''def plot_wordcloud(twitter_df,event):  # plot a word cloud for all words
     all_words=" ".join([text for text in twitter_df['tidy_Content'][twitter_df['Event']==event]])
     wordcloud=WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(all_words)
 
@@ -73,7 +73,7 @@ def plot_histogram(HT):  # plot a histogram for all kinds of words
     ax = sns.barplot(data=d, x= "Hashtag", y = "Count")
     ax.set(ylabel = 'Count')
     plt.show()
-
+'''
 
 def preprocess_y(twitter_df,language):  # encode y from positive, negative and neutral to 1,-1,0
     if language=='english':
@@ -84,7 +84,7 @@ def preprocess_y(twitter_df,language):  # encode y from positive, negative and n
     tfidf=tfidf_vectorizer.fit_transform(twitter_df['tidy_Content'])
     y_validation=pd.DataFrame(columns = ['Type'])
     y_validation['Type']=twitter_df['Type'].copy()
-    #1:positive   0:negative   2:neutral
+    #1:positive   0:negative
     for i in range(0,y_validation['Type'].size):
         if y_validation['Type'][i]=='positive':
             y_validation['Type'][i]=1
@@ -93,13 +93,13 @@ def preprocess_y(twitter_df,language):  # encode y from positive, negative and n
     return y_validation,tfidf
 
 
-def plot_one_event(event,twitter_df):  # plot a word cloud figure and a histogram for one specific event
+'''def plot_one_event(event,twitter_df):  # plot a word cloud figure and a histogram for one specific event
     plot_wordcloud(twitter_df,event)
     # extracting hashtags from positive tweets
     HT_event= hashtag_extract(twitter_df['Content'][twitter_df['Event']==event])
     # unnesting list
     HT_event=sum(HT_event,[])
-    plot_histogram(HT_event)
+    plot_histogram(HT_event)'''
 
 
 def one_event(event,twitter_df):  # a function to select all comments based on one specific event name
@@ -113,40 +113,50 @@ def one_event(event,twitter_df):  # a function to select all comments based on o
     return df
 
 
-def svm_design(x_train,x_test, y_train,y_test):  # for SVM model
-    # use linear instead of other kernels
-    classifier = svm.SVC(kernel='linear')
-    classifier.fit(x_train, y_train)
-    pred = classifier.predict(x_test)
-    print(accuracy_score(y_test, pred))
-    return accuracy_score(y_test, pred)
-
-
 def knn_design(X_train,X_test, y_train,y_test,k):  # for Knn model
     # classify data
+    std = StandardScaler(with_mean=False)
+    X_train = std.fit_transform(X_train)
+    X_test = std.transform(X_test)
     neigh = KNeighborsClassifier(n_neighbors=k)
     neigh.fit(X_train, y_train) # Fit KNN model
     return accuracy_score(y_test,neigh.predict(X_test))
 
 
-def svm_model(twitter_df,language):  # train, valid and test SVM model, and return accuracy
+def knn_model(twitter_df,language,k):  # train, valid and test KNN model, and return accuracy
     y_validation,tfidf=preprocess_y(twitter_df,language)
     x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=42, test_size=0.2)
     x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:(y_validation.size*4)//5],y_validation['Type'].astype('int')[:(y_validation.size*4)//5], random_state=None, test_size=0.25)
     # fit and predict
-    acc_valid=svm_design(x_train_valid, x_test_valid, y_train_valid, y_test_valid)
-    acc_test=svm_design(x_train, x_test,y_train,y_test)
+    acc_valid=knn_design(x_train_valid, x_test_valid, y_train_valid, y_test_valid,k)
+    acc_test=knn_design(x_train, x_test,y_train,y_test,5)
     return acc_valid,acc_test
 
 
-def knn_model(twitter_df,language):  # train, valid and test KNN model, and return accuracy
-    y_validation,tfidf=preprocess_y(twitter_df,language)
-    x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=42, test_size=0.2)
-    x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:(y_validation.size*4)//5],y_validation['Type'].astype('int')[:(y_validation.size*4)//5], random_state=None, test_size=0.25)
-    # fit and predict
-    acc_valid=knn_design(x_train_valid, x_test_valid, y_train_valid, y_test_valid,1)
-    acc_test=knn_design(x_train, x_test,y_train,y_test,1)
-    return acc_valid,acc_test
+def KNN_compare(all_event,twitter_df,language,i_max,event_number):#for binary-split task
+    score_list=[]
+    for i in range(1,i_max):
+        #knn = KNeighborsClassifier(n_neighbors=i)#classify data
+        #knn.fit(tr_X,tr_Y)#train model
+        #pred_i = knn.predict(te_X)#make prediction using test datasets
+        v_avg,t_avg=train_all_event(all_event, twitter_df, language,i,event_number)
+        score_list.append(v_avg)
+    plt.plot(range(1,i_max),score_list,color='pink', linestyle='dashed', marker='o', markerfacecolor='grey',markersize=10)
+    plt.title("Accuracy vs. K Value (Binary)")
+    plt.xlabel("K")
+    plt.ylabel("Accuracy")
+    plt.show()#make a chart to show the results
 
 
-
+def train_all_event(all_event,twitter_df,language,k,event_number):
+    v_avg_k=0
+    t_avg_k=0
+    # train and test all kinds of events
+    for event in all_event:
+        df=one_event(event,twitter_df)
+        acc_v_k,acc_t_k=knn_model(df,language,k)
+        v_avg_k+=acc_v_k
+        t_avg_k+=acc_t_k
+    v_avg_k=v_avg_k/event_number
+    t_avg_k=t_avg_k/event_number
+    return v_avg_k,t_avg_k

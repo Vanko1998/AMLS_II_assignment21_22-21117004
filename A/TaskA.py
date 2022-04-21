@@ -20,6 +20,7 @@ from nltk.corpus import stopwords
 from nltk.tag import pos_tag
 from keras.models import Sequential
 from keras import layers
+from sklearn.model_selection import learning_curve
 
 
 def to_csv(address):  # change txt document to csv file
@@ -66,7 +67,7 @@ def preprocess(twitter_df,language):  # remove all unnecessary content in commen
     return twitter_df
 
 
-def plot_wordcloud(twitter_df,type):  # plot a word cloud for all words
+'''def plot_wordcloud(twitter_df,type):  # plot a word cloud for all words
     all_words=" ".join([text for text in twitter_df['tidy_Content'][twitter_df['Type']==type]])
     wordcloud=WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(all_words)
     plt.figure(figsize=(10, 7))
@@ -92,7 +93,7 @@ def plot_histogram(HT):  # plot a histogram for all kinds of words
     plt.figure(figsize=(16,5))
     ax = sns.barplot(data=d, x= "Hashtag", y = "Count")
     ax.set(ylabel = 'Count')
-    plt.show()
+    plt.show()'''
 
 
 def preprocess_y(twitter_df,language):  # encode y from positive, negative and neutral to 1,-1,0
@@ -126,6 +127,7 @@ def naive_bayes(y_validation,tfidf):  # use naive bayes model, split train, vali
     print(naive_A_valid)
     # fit arabic version data
     nb_test=MultinomialNB()
+    draw_learning_curves(x_train, y_train, nb_test, 10, 'NB')
     nb_test.fit(x_train,y_train)
     naive_A_test=accuracy_score(y_test, nb_test.predict(x_test))
     print('naive bayes test accuracy:')
@@ -137,13 +139,14 @@ def random_forest(y_validation,tfidf):  # use random forest model, split train, 
     x_train_valid, x_test_valid, y_train_valid, y_test_valid=train_test_split(tfidf[:4800,:], y_validation['Type'][:4800].values.astype('int'), random_state=0, test_size=0.25)
     x_train, x_test,y_train,y_test=train_test_split(tfidf, y_validation['Type'].astype('int'), random_state=0, test_size=0.2)
     # fit english version data
-    rf_valid=RandomForestClassifier(n_estimators=500)
+    rf_valid=RandomForestClassifier(n_estimators=500,max_depth=20)
     rf_valid.fit(x_train_valid,y_train_valid)
     random_A_valid=accuracy_score(y_test_valid,rf_valid.predict(x_test_valid))
     print('random forest valid accuracy:')
     print(random_A_valid)
     # fit arabic version data
-    rf_test=RandomForestClassifier(n_estimators=500)
+    rf_test=RandomForestClassifier(n_estimators=500,max_depth=20)
+    draw_learning_curves(x_train, y_train, rf_test, 10, 'RF')
     rf_test.fit(x_train,y_train)
     random_A_test=accuracy_score(y_test,rf_test.predict(x_test))
     print('random forest test accuracy:')
@@ -182,18 +185,16 @@ def data_cleaning(text_list):  # clean data for LSTM model
     return reconstructed_list
 
 
-def LSTM_model(twitter_df,y_validation,language):
+def LSTM_model(twitter_df,y_validation,language,epochs):
     # Decompose the data into training sets and test sets
-    if language=='english':
-        lstm_df=pd.DataFrame(columns=['tidy_Content'])
-        lstm_df['tidy_Content']=np.vectorize(remove_pattern)(twitter_df['Content'], "@[\w]*")
-        lstm_df['tidy_Content']=np.vectorize(remove_pattern)(lstm_df['tidy_Content'], r"#(\w+)")
-        lstm_df['tidy_Content']=np.vectorize(remove_pattern)(lstm_df['tidy_Content'], r'http://[a-zA-Z0-9.?/&=:]*')
+    lstm_df=pd.DataFrame(columns=['tidy_Content'])
+    lstm_df['tidy_Content']=np.vectorize(remove_pattern)(twitter_df['Content'], "@[\w]*")
+    lstm_df['tidy_Content']=np.vectorize(remove_pattern)(lstm_df['tidy_Content'], r"#(\w+)")
+    lstm_df['tidy_Content']=np.vectorize(remove_pattern)(lstm_df['tidy_Content'], r'http://[a-zA-Z0-9.?/&=:]*')
+    if language == 'english':
         lstm_df['tidy_Content']=lstm_df['tidy_Content'].str.replace("[^a-zA-Z#]", " ",regex=True)
-        lstm_df['tidy_Content']=lstm_df['tidy_Content'].apply(lambda x: ' '.join([w for w in x.split() if len(w)>3]))
-        X_train, X_test,y_train,y_test=train_test_split(lstm_df['tidy_Content'], y_validation['Type'], random_state=0, test_size=0.2)
-    elif language=='arabic':
-        X_train, X_test,y_train,y_test=train_test_split(twitter_df['Content'], y_validation['Type'], random_state=0, test_size=0.2)
+    lstm_df['tidy_Content']=lstm_df['tidy_Content'].apply(lambda x: ' '.join([w for w in x.split() if len(w)>3]))
+    X_train, X_test,y_train,y_test=train_test_split(lstm_df['tidy_Content'], y_validation['Type'], random_state=0, test_size=0.2)
     # to merge transform data
     X_train=data_cleaning(X_train)
     X_test=data_cleaning(X_test)
@@ -211,8 +212,22 @@ def LSTM_model(twitter_df,y_validation,language):
     model.add(layers.Bidirectional(layers.LSTM(128)))
     model.add(layers.Dense(3,activation='softmax'))
     model.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
-    model.fit(X_train,y_train,batch_size=256,epochs=5,validation_data=(X_test,y_test))
+    model.fit(X_train,y_train,batch_size=256,epochs=epochs,validation_data=(X_test,y_test))
 
 
+def draw_learning_curves(X, y, estimator, num_trainings,title):
+    train_sizes, train_scores, test_scores = learning_curve(estimator, X, y, cv=5, n_jobs=2, train_sizes=np.linspace(.1, 1.0, num_trainings))
+    train_scores_mean = np.mean(train_scores, axis=1)
+    train_scores_std = np.std(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    test_scores_std = np.std(test_scores, axis=1)
 
+    plt.grid()
+    plt.title(title + " Learning Curves")
+    plt.xlabel("Training examples")
+    plt.ylabel("Score")
+    plt.plot(train_scores_mean, 'o-', color="g",label="Training score")
+    plt.plot(test_scores_mean, 'o-', color="y",label="Cross-validation score")
+    plt.legend(loc="best")
+    plt.show()
 
